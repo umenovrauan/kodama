@@ -15,3 +15,10 @@ type Frame struct {
 	Lap      int
 	LapTime  time.Duration
 }
+
+type Session struct {
+	Track	string
+	Car	string
+	MaxRPM	string
+	SMVersion	string
+}
