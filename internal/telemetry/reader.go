@@ -40,7 +40,7 @@ type Reader struct {
 	staleAfter time.Duration
 	frames     chan Frame
 	dropped    atomic.Uint64
-	mu         sync.RWMutes
+	mu         sync.RWMutex
 	session    Session
 	haveSes    bool
 }
@@ -96,7 +96,7 @@ type pumpState struct {
 }
 
 func (r *Reader) pump(ctx context.Context, c *conn) error {
-	t := time.NewTicker(r.internal)
+	t := time.NewTicker(r.interval)
 	defer t.Stop()
 	st := pumpState{lastID: -1, lastChange: time.Now()}
 	for {

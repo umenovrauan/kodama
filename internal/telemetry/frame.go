@@ -19,6 +19,6 @@ type Frame struct {
 type Session struct {
 	Track     string
 	Car       string
-	MaxRPM    string
+	MaxRPM    int
 	SMVersion string
 }
