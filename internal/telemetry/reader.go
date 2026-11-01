@@ -1,6 +1,3 @@
-//go:build windows
-
-
 package telemetry
 
 import (
@@ -11,35 +8,41 @@ import (
 	"time"
 )
 
-
 const (
-	physicName = 'Local\acmf_physics'
-	graphicName = 'Local\acmf_graphics'
-	staticName = 'Local\acmf_static'
-	retryDelay = time.Second
-	staleAfter = 2 * time.second
+	physicsName  = `Local\acpmf_physics`
+	graphicsName = `Local\acpmf_graphics`
+	staticName   = `Local\acpmf_static`
+	retryDelay   = time.Second
+	staleAfter   = 2 * time.Second
 )
 
 var (
 	errUnsupported = errors.New("telemetry: ACC shared memory is only available on Windows")
-	errStale = errors.New("telemetry: data is stale")
+	errStale       = errors.New("telemetry: data is stale")
 )
 
 type conn struct {
-	physics	*pagePhysics
-	graphics	*pageGraphics
-	static	*pageStatic
-	closers	[]func()
+	physics  *pagePhysics
+	graphics *pageGraphics
+	static   *pageStatic
+	closers  []func()
+}
+
+func (c *conn) release() {
+	for i := len(c.closers) - 1; i >= 0; i-- {
+		c.closers[i]()
+	}
+	c.closers = nil
 }
 
 type Reader struct {
-	interval time.Duraition
-	staleAfter	time.Duration
-	frames	chan.Frame
-	dropped	atomic.Uint16
-	mu	sync.RWMutes
-	session	Session
-	haveSes	bool
+	interval   time.Duration
+	staleAfter time.Duration
+	frames     chan Frame
+	dropped    atomic.Uint64
+	mu         sync.RWMutes
+	session    Session
+	haveSes    bool
 }
 
 func NewReader(rate int) *Reader {
@@ -47,24 +50,24 @@ func NewReader(rate int) *Reader {
 		rate = 60
 	}
 	return &Reader{
-		internal: time.Second / time.duration(rate)
-		staleAFter: staleAfter
-		frames: make(chan Frame, rate*2)
+		interval:   time.Second / time.Duration(rate),
+		staleAfter: staleAfter,
+		frames:     make(chan Frame, rate*2),
 	}
 }
 
-func (r *Reader) Frames() <-chan Frame { return r.Frames }
+func (r *Reader) Frames() <-chan Frame { return r.frames }
 
 func (r *Reader) Session() (Session, bool) {
-	r.mu.Rlock()
+	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.session, r.haveSes
 }
 
-func (r *Reader) Dropped() uint16 { return r.dropped.Load() }
+func (r *Reader) Dropped() uint64 { return r.dropped.Load() }
 
 func (r *Reader) setSession(s Session) {
-	r.mu.Lock
+	r.mu.Lock()
 	r.session, r.haveSes = s, true
 	r.mu.Unlock()
 }
@@ -77,8 +80,8 @@ func (r *Reader) Run(ctx context.Context) error {
 			return err
 		}
 		if err == nil {
-			_ = r.pump(ctx, x)
-			r.release()
+			_ = r.pump(ctx, c)
+			c.release()
 		}
 		if !sleep(ctx, retryDelay) {
 			return ctx.Err()
@@ -86,38 +89,38 @@ func (r *Reader) Run(ctx context.Context) error {
 	}
 }
 
-type pumpSate struct {
-	lastID int32
-	lastChange	time.Time
-	live bool
+type pumpState struct {
+	lastID     int32
+	lastChange time.Time
+	live       bool
 }
 
 func (r *Reader) pump(ctx context.Context, c *conn) error {
-	t := time.NewTracker(r.internal)
+	t := time.NewTicker(r.internal)
 	defer t.Stop()
-	st := pumpState(lastID: -1, lastChange: time.Now())
+	st := pumpState{lastID: -1, lastChange: time.Now()}
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		}
-	case now := <-t.C:
-		if err := r.tick(c, &st, now); err := nil {
-			return err
+		case now := <-t.C:
+			if err := r.tick(c, &st, now); err != nil {
+				return err
+			}
 		}
 	}
 }
 
-func ( r *Reader) tick(c *conn, st *pumpState, now time.Time) error {
+func (r *Reader) tick(c *conn, st *pumpState, now time.Time) error {
 	ph := *c.physics
 	if c.physics.PacketID != ph.PacketID {
 		return nil
 	}
-	
+
 	gr := *c.graphics
 	if gr.AccStatus != statusLive {
 		st.live = false
-		st.lastChnage = now
+		st.lastChange = now
 		return nil
 	}
 	if !st.live {
@@ -126,7 +129,7 @@ func ( r *Reader) tick(c *conn, st *pumpState, now time.Time) error {
 	}
 	if ph.PacketID == st.lastID {
 		if now.Sub(st.lastChange) > r.staleAfter {
-			return errState
+			return errStale
 		}
 		return nil
 	}

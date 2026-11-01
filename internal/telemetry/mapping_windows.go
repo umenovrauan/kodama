@@ -1,16 +1,15 @@
 package telemetry
 
-
 import (
 	"fmt"
-	"unsafe"
 	"golang.org/x/sys/windows"
+	"unsafe"
 )
 
 var procOpenFileMappingW = windows.NewLazySystemDLL("kernel32.dll").NewProc("OpenFileMappingW")
 
 func openFileMapping(access uint32, name *uint16) (windows.Handle, error) {
-	r, _, errno := proceOpenFileMappingW.Call(uintptr(access), 0, uitptr(unsafe.Pointer(name)))
+	r, _, errno := procOpenFileMappingW.Call(uintptr(access), 0, uintptr(unsafe.Pointer(name)))
 	if r == 0 {
 		return 0, errno
 	}
@@ -28,7 +27,7 @@ func connect() (_ *conn, err error) {
 	if c.physics, err = openPage[pagePhysics](c, physicsName); err != nil {
 		return nil, err
 	}
-	if c.gpaphics, err = openPage[pageGraphics](c, graphicsName); err != nil {
+	if c.graphics, err = openPage[pageGraphics](c, graphicsName); err != nil {
 		return nil, err
 	}
 	if c.static, err = openPage[pageStatic](c, staticName); err != nil {
@@ -62,9 +61,9 @@ func mapPage[T any](name string) (*T, func(), error) {
 		return nil, nil, fmt.Errorf("map %s: %w", name, err)
 	}
 	closeFn := func() {
-		_ = window.UnmapViewOfFile(addr)
+		_ = windows.UnmapViewOfFile(addr)
 		_ = windows.CloseHandle(h)
 	}
-	p := (*T)(*(*unsafe.Pointer)(unsafe.Pointer(%addr)))
+	p := (*T)(*(*unsafe.Pointer)(unsafe.Pointer(&addr)))
 	return p, closeFn, nil
 }

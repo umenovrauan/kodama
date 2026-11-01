@@ -17,8 +17,8 @@ type Frame struct {
 }
 
 type Session struct {
-	Track	string
-	Car	string
-	MaxRPM	string
-	SMVersion	string
+	Track     string
+	Car       string
+	MaxRPM    string
+	SMVersion string
 }
